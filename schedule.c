@@ -181,7 +181,6 @@ int main(int argc, char *argv[]) {
             }
             
             Process *p = &procs[i];
-            found = 1;
                 //Only 1 process left at highestPriority
             //execute until completion and reduce the number of processes remaining
             if(priorityCount == 1){
