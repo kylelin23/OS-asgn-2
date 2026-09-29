@@ -5,6 +5,14 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/time.h>
+#include <errno.h>
+
+volatile sig_atomic_t quantumDone = 0;
+
+void alarm_handler(int signum){
+    quantumDone = 1;
+}
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -126,14 +134,125 @@ int main(int argc, char *argv[]) {
         waitpid(pid, NULL, WUNTRACED);
     }
 
-    // IMPLEMENT ROUND ROBIN HERE
-    // Currently: Just runs each process in priority order
-    // Need to implement round robin still
+    /*Executes Sequentially
     for (int i = 0; i < count; i++) {
         kill(procs[i].pid, SIGCONT);
         waitpid(procs[i].pid, NULL, 0);
     }
+    */
 
+    //do not busy wait
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = alarm_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGALRM, &sa, NULL);
+
+    printf("Total number of processes in the system: %d\n", count);
+    int processesLeft =  count;
+    int currentIndex = 0;
+
+    // While there are still processes left in the array
+    while (processesLeft > 0){
+        // starts at -1 b/c highest priority is 0
+        int highestPriority = -1;
+
+        //Highest Priority in Array
+        for (int i = 0; i < count; i++){
+            if(!procs[i].done){
+                if(highestPriority == -1 || procs[i].priority < highestPriority){
+                    highestPriority = procs[i].priority;
+                }
+            }
+        }
+        //Looking for more processes that share highest priority
+        int priorityCount = 0;
+        for(int i = 0; i < count; i++){
+            if(!procs[i].done && procs[i].priority == highestPriority){
+                priorityCount++;
+            }
+        }
+        //Execute if it matches highest priority
+        int found = 0;
+        for(int c = 0; c < count; c++){
+            int i = (currentIndex + c) % count;
+            if(procs[i].done || procs[i].priority != highestPriority){
+                continue;
+            }
+            
+            Process *p = &procs[i];
+            found = 1;
+                //Only 1 process left at highestPriority
+            //execute until completion and reduce the number of processes remaining
+            if(priorityCount == 1){
+                kill((*p).pid, SIGCONT);
+                waitpid((*p).pid, NULL, 0);
+                (*p).done = 1;
+                processesLeft--;
+                currentIndex = (i + 1) % count;
+            }
+            else{
+                quantumDone = 0;
+                //timer
+                struct itimerval timer;
+
+                timer.it_value.tv_sec = quantum / 1000;
+                timer.it_value.tv_usec = (quantum % 1000) * 1000;
+
+                timer.it_interval.tv_sec = 0;
+                timer.it_interval.tv_usec = 0;
+
+                setitimer(ITIMER_REAL, &timer, NULL);
+
+                //wake up process
+                kill((*p).pid, SIGCONT);
+
+                int processStatus = 0;
+
+                pid_t result = waitpid((*p).pid, &processStatus, 0);
+
+                timer.it_value.tv_sec = 0;
+                timer.it_value.tv_usec = 0;
+                setitimer(ITIMER_REAL, &timer, NULL);
+
+                /*
+                if(result == 0){
+                    result = waitpid((*p).pid, &processStatus, WNOHANG);
+                }
+                
+                if(result > 0){
+                    (*p).done = 1;
+                    processesLeft--;
+                }
+                else if(result == 0){
+                    kill((*p).pid, SIGSTOP);
+                    waitpid((*p).pid, &processStatus, WUNTRACED);
+                }
+                else{
+                    perror("waitpid");
+                    exit(1);
+                }
+                    */
+                if(result > 0){
+                    (*p).done = 1;
+                    processesLeft--;
+                }
+                else if (result < 0 && errno == EINTR && quantumDone){
+                    kill((*p).pid, SIGSTOP);
+                    waitpid((*p).pid, &processStatus, WUNTRACED);
+
+                }
+                else{
+                    perror("waitpid");
+                    exit(1);
+                }
+                currentIndex = (i + 1) % count; 
+                break;
+            }
+        }
+    
+    }
     for (int i = 0; i < count; i++) {
         for (int j = 0; j < procs[i].nargs; j++) {
             free(procs[i].args[j]);
@@ -144,3 +263,6 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+
+

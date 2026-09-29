@@ -1,0 +1,18 @@
+sigaction -- system call used to changed the action
+taken by the process on receipt of a specific signal
+
+struct sigaction {
+    void     (*sa_handler)(int);
+    void     (*sa_sigaction)(int, siginfo_t *, void *);
+    sigset_t   sa_mask;
+    int        sa_flags;
+    void     (*sa_restorer)(void);
+};
+
+https://man7.org/linux/man-pages/man2/sigaction.2.html
+
+https://linux.die.net/man/2/setitimer
+
+https://linux.die.net/man/2/setitimer
+
+
