@@ -174,7 +174,6 @@ int main(int argc, char *argv[]) {
             }
         }
         //Execute if it matches highest priority
-        int found = 0;
         for(int c = 0; c < count; c++){
             int i = (currentIndex + c) % count;
             if(procs[i].done || procs[i].priority != highestPriority){
